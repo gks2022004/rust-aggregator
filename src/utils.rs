@@ -1,0 +1,271 @@
+use crate::types::{AggregatorError, Result};
+use ethers::types::{Address, U256};
+use std::str::FromStr;
+
+/// Calculate UniswapV2 output amount using the constant product formula
+/// amountOut = (amountIn * feeFactor * reserveOut) / (reserveIn * 10000 + amountIn * feeFactor)
+/// where feeFactor = 10000 - fee_bps (e.g., 9970 for 0.3% fee)
+pub fn calculate_uniswap_v2_output(
+    amount_in: U256,
+    reserve_in: U256,
+    reserve_out: U256,
+    fee_bps: u32,
+) -> Result<U256> {
+    // Validate inputs
+    if amount_in.is_zero() {
+        return Err(AggregatorError::InvalidAmount("Amount in cannot be zero".to_string()));
+    }
+    if reserve_in.is_zero() || reserve_out.is_zero() {
+        return Err(AggregatorError::InsufficientLiquidity("Pool has zero reserves".to_string()));
+    }
+
+    // Calculate fee factor (10000 - fee_bps)
+    let fee_factor = U256::from(10000 - fee_bps);
+    let fee_base = U256::from(10000);
+
+    // amountInWithFee = amountIn * feeFactor
+    let amount_in_with_fee = amount_in
+        .checked_mul(fee_factor)
+        .ok_or(AggregatorError::MathError)?;
+
+    // numerator = amountInWithFee * reserveOut
+    let numerator = amount_in_with_fee
+        .checked_mul(reserve_out)
+        .ok_or(AggregatorError::MathError)?;
+
+    // denominator = reserveIn * 10000 + amountInWithFee
+    let denominator = reserve_in
+        .checked_mul(fee_base)
+        .ok_or(AggregatorError::MathError)?
+        .checked_add(amount_in_with_fee)
+        .ok_or(AggregatorError::MathError)?;
+
+    // amountOut = numerator / denominator
+    let amount_out = numerator
+        .checked_div(denominator)
+        .ok_or(AggregatorError::MathError)?;
+
+    if amount_out.is_zero() {
+        return Err(AggregatorError::InsufficientLiquidity(
+            "Output amount would be zero".to_string(),
+        ));
+    }
+
+    Ok(amount_out)
+}
+
+/// Calculate price impact in basis points
+pub fn calculate_price_impact(
+    amount_in: U256,
+    reserve_in: U256,
+    amount_out: U256,
+    reserve_out: U256,
+) -> u32 {
+    if reserve_in.is_zero() || reserve_out.is_zero() {
+        return 10000; // 100% impact if no liquidity
+    }
+
+    // Spot price before swap: reserveOut / reserveIn
+    // Execution price: amountOut / amountIn
+    // Price impact = (1 - executionPrice / spotPrice) * 10000
+
+    // To avoid floating point, we use: impact = (spotPrice - executionPrice) / spotPrice * 10000
+    // Which becomes: impact = (amountIn * reserveOut - amountOut * reserveIn) / (amountIn * reserveOut) * 10000
+
+    let numerator = match amount_in.checked_mul(reserve_out) {
+        Some(val) => match amount_out.checked_mul(reserve_in) {
+            Some(val2) => val.saturating_sub(val2),
+            None => return 10000,
+        },
+        None => return 10000,
+    };
+
+    let denominator = match amount_in.checked_mul(reserve_out) {
+        Some(val) => val,
+        None => return 10000,
+    };
+
+    if denominator.is_zero() {
+        return 10000;
+    }
+
+    // Calculate impact in basis points
+    let impact = numerator
+        .checked_mul(U256::from(10000))
+        .and_then(|v| v.checked_div(denominator))
+        .unwrap_or(U256::from(10000));
+
+    impact.as_u32().min(10000)
+}
+
+/// Calculate the fee amount from an input amount
+pub fn calculate_fee(amount: U256, fee_bps: u32) -> U256 {
+    amount
+        .checked_mul(U256::from(fee_bps))
+        .and_then(|v| v.checked_div(U256::from(10000)))
+        .unwrap_or(U256::zero())
+}
+
+/// Parse a token amount string with decimal support
+/// Examples: "1.0", "0.5", "1000"
+pub fn parse_token_amount(amount_str: &str, decimals: u8) -> Result<U256> {
+    let parts: Vec<&str> = amount_str.split('.').collect();
+    
+    if parts.is_empty() || parts.len() > 2 {
+        return Err(AggregatorError::ParseError(
+            format!("Invalid amount format: {}", amount_str)
+        ));
+    }
+
+    let integer_part = parts[0].parse::<u128>()
+        .map_err(|_| AggregatorError::ParseError(format!("Invalid integer part: {}", parts[0])))?;
+
+    let decimal_part = if parts.len() == 2 {
+        let dec_str = parts[1];
+        if dec_str.len() > decimals as usize {
+            return Err(AggregatorError::ParseError(
+                format!("Too many decimal places. Max: {}", decimals)
+            ));
+        }
+        // Pad with zeros to reach full decimals
+        let padded = format!("{:0<width$}", dec_str, width = decimals as usize);
+        padded.parse::<u128>()
+            .map_err(|_| AggregatorError::ParseError(format!("Invalid decimal part: {}", dec_str)))?
+    } else {
+        0
+    };
+
+    // Calculate: (integer_part * 10^decimals) + decimal_part
+    let multiplier = 10u128.pow(decimals as u32);
+    let total = integer_part
+        .checked_mul(multiplier)
+        .and_then(|v| v.checked_add(decimal_part))
+        .ok_or(AggregatorError::MathError)?;
+
+    Ok(U256::from(total))
+}
+
+/// Format a token amount with decimals for display
+pub fn format_token_amount(amount: U256, decimals: u8) -> String {
+    if amount.is_zero() {
+        return "0".to_string();
+    }
+
+    let divisor = U256::from(10u128.pow(decimals as u32));
+    let integer_part = amount / divisor;
+    let remainder = amount % divisor;
+
+    if remainder.is_zero() {
+        return format!("{}", integer_part);
+    }
+
+    // Format with decimals
+    let decimal_str = format!("{:0>width$}", remainder, width = decimals as usize);
+    let trimmed = decimal_str.trim_end_matches('0');
+    
+    if trimmed.is_empty() {
+        format!("{}", integer_part)
+    } else {
+        format!("{}.{}", integer_part, trimmed)
+    }
+}
+
+/// Format a number with thousands separators
+pub fn format_with_commas(value: f64) -> String {
+    let formatted = format!("{:.2}", value);
+    let parts: Vec<&str> = formatted.split('.').collect();
+    let integer_part = parts[0];
+    let decimal_part = if parts.len() > 1 { parts[1] } else { "00" };
+
+    let mut result = String::new();
+    for (i, ch) in integer_part.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+
+    format!("{}.{}", result.chars().rev().collect::<String>(), decimal_part)
+}
+
+/// Parse an Ethereum address from string
+pub fn parse_address(addr_str: &str) -> Result<Address> {
+    Address::from_str(addr_str)
+        .map_err(|_| AggregatorError::InvalidTokenAddress(addr_str.to_string()))
+}
+
+/// Convert wei to ether as f64
+pub fn wei_to_ether(wei: U256) -> f64 {
+    let eth_decimals = 18;
+    let divisor = 10f64.powi(eth_decimals);
+    wei.as_u128() as f64 / divisor
+}
+
+/// Convert gwei to wei
+pub fn gwei_to_wei(gwei: u64) -> U256 {
+    U256::from(gwei) * U256::from(1_000_000_000u64)
+}
+
+/// Estimate gas cost in USD
+pub fn estimate_gas_cost_usd(gas_used: U256, gas_price_gwei: u64, eth_price_usd: f64) -> f64 {
+    let gas_price_wei = gwei_to_wei(gas_price_gwei);
+    let total_cost_wei = gas_used * gas_price_wei;
+    let total_cost_eth = wei_to_ether(total_cost_wei);
+    total_cost_eth * eth_price_usd
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_uniswap_v2_output() {
+        // Test case: 1 ETH in, reserves 100 ETH / 180000 USDC, 0.3% fee
+        let amount_in = U256::from(1_000_000_000_000_000_000u128); // 1 ETH
+        let reserve_in = U256::from(100_000_000_000_000_000_000u128); // 100 ETH
+        let reserve_out = U256::from(180_000_000_000u128); // 180k USDC (6 decimals)
+        let fee_bps = 30; // 0.3%
+
+        let result = calculate_uniswap_v2_output(amount_in, reserve_in, reserve_out, fee_bps);
+        assert!(result.is_ok());
+        
+        let amount_out = result.unwrap();
+        assert!(amount_out > U256::zero());
+    }
+
+    #[test]
+    fn test_parse_token_amount() {
+        let amount = parse_token_amount("1.0", 18).unwrap();
+        assert_eq!(amount, U256::from(1_000_000_000_000_000_000u128));
+
+        let amount = parse_token_amount("0.5", 18).unwrap();
+        assert_eq!(amount, U256::from(500_000_000_000_000_000u128));
+
+        let amount = parse_token_amount("1000", 6).unwrap();
+        assert_eq!(amount, U256::from(1_000_000_000u128));
+    }
+
+    #[test]
+    fn test_format_token_amount() {
+        let amount = U256::from(1_000_000_000_000_000_000u128);
+        assert_eq!(format_token_amount(amount, 18), "1");
+
+        let amount = U256::from(1_500_000_000_000_000_000u128);
+        assert_eq!(format_token_amount(amount, 18), "1.5");
+
+        let amount = U256::from(1_234_560_000_000_000_000u128);
+        assert_eq!(format_token_amount(amount, 18), "1.23456");
+    }
+
+    #[test]
+    fn test_format_with_commas() {
+        assert_eq!(format_with_commas(1829.43), "1,829.43");
+        assert_eq!(format_with_commas(1000000.50), "1,000,000.50");
+    }
+
+    #[test]
+    fn test_gwei_to_wei() {
+        let wei = gwei_to_wei(30);
+        assert_eq!(wei, U256::from(30_000_000_000u64));
+    }
+}
