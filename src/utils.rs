@@ -136,6 +136,48 @@ pub fn get_token_decimals(token_address: Address) -> u8 {
     }
 }
 
+/// Get token symbol for known tokens
+/// Returns shortened address if token is unknown
+pub fn get_token_symbol(token_address: Address) -> String {
+    let addr_str = format!("{:?}", token_address).to_lowercase();
+    
+    match addr_str.as_str() {
+        // Stablecoins
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => "USDC".to_string(),
+        "0xdac17f958d2ee523a2206206994597c13d831ec7" => "USDT".to_string(),
+        "0x6b175474e89094c44da98b954eedeac495271d0f" => "DAI".to_string(),
+        "0x0000000000085d4780b73119b644ae5ecd22b376" => "TUSD".to_string(),
+        "0x57ab1ec28d129707052df4df418d58a2d46d5f51" => "sUSD".to_string(),
+        "0x4fabb145d64652a948d72533023f6e7a623c7c53" => "BUSD".to_string(),
+        
+        // Major tokens
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" => "WETH".to_string(),
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599" => "WBTC".to_string(),
+        "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2" => "MKR".to_string(),
+        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984" => "UNI".to_string(),
+        "0x514910771af9ca656af840dff83e8264ecf986ca" => "LINK".to_string(),
+        "0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0" => "MATIC".to_string(),
+        "0x0d8775f648430679a709e98d2b0cb6250d2887ef" => "BAT".to_string(),
+        "0xdd974d5c2e2928dea5f71b9825b8b646686bd200" => "KNC".to_string(),
+        "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2" => "SUSHI".to_string(),
+        "0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9" => "AAVE".to_string(),
+        "0xc00e94cb662c3520282e6f5717214004a7f26888" => "COMP".to_string(),
+        "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce" => "SHIB".to_string(),
+        "0x6810e776880c02933d47db1b9fc05908e5386b96" => "GNO".to_string(),
+        "0xa0b73e1ff0b80914ab6fe0444e65848c4c34450b" => "CRO".to_string(),
+        
+        // Default: return shortened address
+        _ => {
+            let addr = format!("{:?}", token_address);
+            if addr.len() > 10 {
+                format!("{}...{}", &addr[0..6], &addr[addr.len()-4..])
+            } else {
+                addr
+            }
+        }
+    }
+}
+
 /// Parse a token amount string with decimal support
 /// Examples: "1.0", "0.5", "1000"
 pub fn parse_token_amount(amount_str: &str, decimals: u8) -> Result<U256> {

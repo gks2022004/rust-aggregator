@@ -362,9 +362,11 @@ fn handle_cache(aggregator: &Aggregator, action: CacheAction, json_output: bool)
 }
 
 fn print_quote(quote: &rust_aggregator::RouteQuote) {
-    // Get decimals for input and output tokens
+    // Get decimals and symbols for input and output tokens
     let token_in_decimals = utils::get_token_decimals(quote.token_in);
     let token_out_decimals = utils::get_token_decimals(quote.token_out);
+    let token_in_symbol = utils::get_token_symbol(quote.token_in);
+    let token_out_symbol = utils::get_token_symbol(quote.token_out);
     
     println!();
     println!("{}", "━".repeat(60).bright_green());
@@ -372,15 +374,20 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     println!("{}", "━".repeat(60).bright_green());
     println!();
 
-    // Route visualization with colors
-    let route_parts: Vec<String> = quote.description
-        .split(" → ")
+    // Route visualization with colors and token symbols
+    let route_addresses: Vec<&str> = quote.description.split(" → ").collect();
+    let route_parts: Vec<String> = route_addresses
+        .iter()
         .enumerate()
-        .map(|(i, part)| {
+        .map(|(i, addr)| {
+            // Parse address and get symbol
+            let token_addr = utils::parse_address(addr).unwrap_or_else(|_| quote.token_in);
+            let symbol = utils::get_token_symbol(token_addr);
+            
             if i == 0 {
-                part.bright_cyan().to_string()
+                format!("{} ({})", symbol.bright_cyan().bold(), addr.bright_black())
             } else {
-                format!("{} {}", "→".bright_yellow(), part.bright_magenta())
+                format!("{} {} ({})", "→".bright_yellow(), symbol.bright_magenta().bold(), addr.bright_black())
             }
         })
         .collect();
@@ -388,10 +395,8 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     println!("  {} {}", "".to_string(), "Route Path:".bright_white().bold());
     println!("    {}", route_parts.join(" "));
     println!();
-    println!("  {} {} {} {}", 
-        "📍".to_string(),
-        "Hops:".bright_white().bold(), 
-        quote.hop_count().to_string().bright_yellow().bold(),
+    println!("  {} {} ", 
+        format!("Hops: {}", quote.hop_count()).bright_white().bold(), 
         if quote.hop_count() == 1 { "hop" } else { "hops" }.bright_black()
     );
     println!();
@@ -401,13 +406,15 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     println!("{}", "━".repeat(60).bright_blue());
     println!();
     
-    println!("  {} {}", 
+    println!("  {} {} {}", 
         "Input:".bright_white().bold(),
-        utils::format_token_amount(quote.amount_in, token_in_decimals).bright_cyan().bold()
+        utils::format_token_amount(quote.amount_in, token_in_decimals).bright_cyan().bold(),
+        token_in_symbol.bright_cyan()
     );
-    println!("  {} {}", 
+    println!("  {} {} {}", 
         "Output:".bright_white().bold(),
-        utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green().bold()
+        utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green().bold(),
+        token_out_symbol.bright_green()
     );
     println!();
     
@@ -419,11 +426,10 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     } else {
         0.0
     };
-    
-    println!("  {} {} {}", 
-        "".to_string(),
+
+    println!("  {} {}", 
         "Rate:".bright_white().bold(), 
-        format!("{:.6}", rate).bright_yellow().bold()
+        format!("{:.6} {} per {}", rate, token_out_symbol, token_in_symbol).bright_yellow().bold()
     );
     println!();
 
