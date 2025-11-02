@@ -86,6 +86,19 @@ impl Aggregator {
         amount_in: U256,
         optimization: OptimizationStrategy,
     ) -> Result<RouteQuote> {
+        let quotes = self.get_top_quotes(token_in, token_out, amount_in, optimization, 1)?;
+        Ok(quotes.into_iter().next().unwrap())
+    }
+
+    /// Get top N quotes for a swap, sorted by score
+    pub fn get_top_quotes(
+        &self,
+        token_in: Address,
+        token_out: Address,
+        amount_in: U256,
+        optimization: OptimizationStrategy,
+        limit: usize,
+    ) -> Result<Vec<RouteQuote>> {
         let pools = self.pool_manager.get_all_pools();
 
         if pools.is_empty() {
@@ -101,7 +114,7 @@ impl Aggregator {
             block_number: 0,
         };
 
-        router.find_best_route(&pools, token_in, token_out, amount_in, &context)
+        router.find_top_routes(&pools, token_in, token_out, amount_in, &context, limit)
     }
 
     /// Get all cached pools
@@ -112,6 +125,11 @@ impl Aggregator {
     /// Get pools containing a specific token
     pub fn get_pools_with_token(&self, token: Address) -> Vec<PoolInfo> {
         self.pool_manager.get_pools_with_token(&token)
+    }
+
+    /// Get configuration
+    pub fn get_config(&self) -> &Config {
+        &self.config
     }
 
     /// Export cache to file

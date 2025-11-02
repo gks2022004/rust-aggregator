@@ -41,6 +41,13 @@ enum Commands {
         limit: Option<usize>,
     },
 
+    /// Fetch pools from all supported DEXes
+    FetchAllDexes {
+        /// Maximum number of pools to fetch per DEX
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
+
     /// Get best swap quote
     Quote {
         /// Input token address or symbol
@@ -55,6 +62,14 @@ enum Commands {
         /// Optimization strategy
         #[arg(long, default_value = "balanced")]
         optimize: String,
+
+        /// Refresh pool data before quoting
+        #[arg(long)]
+        refresh: bool,
+
+        /// Show top N alternative routes for comparison
+        #[arg(long)]
+        show_alternatives: Option<usize>,
     },
 
     /// List cached pools
@@ -132,12 +147,17 @@ async fn main() {
         Commands::FetchPools { factory, name, limit } => {
             handle_fetch_pools(&aggregator, &factory, &name, limit, cli.json).await
         }
+        Commands::FetchAllDexes { limit } => {
+            handle_fetch_all_dexes(&aggregator, limit, cli.json).await
+        }
         Commands::Quote {
             token_in,
             token_out,
             amount,
             optimize,
-        } => handle_quote(&aggregator, &token_in, &token_out, &amount, &optimize, cli.json).await,
+            refresh,
+            show_alternatives,
+        } => handle_quote(&aggregator, &token_in, &token_out, &amount, &optimize, refresh, show_alternatives, cli.json).await,
         Commands::ListPools { token } => handle_list_pools(&aggregator, token.as_deref(), cli.json),
         Commands::Cache { action } => handle_cache(&aggregator, action, cli.json),
     };
@@ -190,14 +210,103 @@ async fn handle_fetch_pools(
     Ok(())
 }
 
+async fn handle_fetch_all_dexes(
+    aggregator: &Aggregator,
+    limit: usize,
+    json_output: bool,
+) -> Result<()> {
+    if !json_output {
+        println!("\n{}", "━".repeat(60).bright_cyan());
+        println!("{}  {}", "".to_string(), "Fetching Pools from All DEXes".bright_cyan().bold());
+        println!("{}", "━".repeat(60).bright_cyan());
+        println!();
+    }
+
+    let factories = aggregator.get_config().get_all_factories();
+    let mut total_fetched = 0;
+    let mut dex_results = Vec::new();
+
+    for (dex_name, factory_addr) in factories {
+        if !json_output {
+            println!("  {} Fetching from {}...", "→".bright_yellow(), dex_name.bright_white().bold());
+        }
+
+        match aggregator.fetch_pools(factory_addr, dex_name.clone(), Some(limit)).await {
+            Ok(pools) => {
+                let count = pools.len();
+                total_fetched += count;
+                dex_results.push((dex_name.clone(), count, true));
+                
+                if !json_output {
+                    println!("    {} {} pools", "✓".bright_green(), count.to_string().bright_yellow());
+                }
+            }
+            Err(e) => {
+                dex_results.push((dex_name.clone(), 0, false));
+                if !json_output {
+                    println!("    {} Failed: {}", "✗".bright_red(), e.to_string().bright_red());
+                }
+            }
+        }
+    }
+
+    // Export to cache
+    aggregator.export_cache("./cache/pools.json")?;
+
+    if json_output {
+        let results: Vec<_> = dex_results.iter().map(|(name, count, success)| {
+            serde_json::json!({
+                "dex": name,
+                "pools_fetched": count,
+                "success": success
+            })
+        }).collect();
+        
+        let output = serde_json::json!({
+            "success": true,
+            "total_pools": total_fetched,
+            "dexes": results,
+        });
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    } else {
+        println!();
+        println!("{} {}", "".to_string(), "Summary".bright_green().bold());
+        println!("  Total pools fetched: {}", total_fetched.to_string().bright_yellow().bold());
+        println!("  Cache saved:         {}", "./cache/pools.json".bright_cyan());
+        println!("{}", "━".repeat(60).bright_cyan());
+        println!();
+    }
+
+    Ok(())
+}
+
 async fn handle_quote(
     aggregator: &Aggregator,
     token_in: &str,
     token_out: &str,
     amount_str: &str,
     optimize: &str,
+    refresh: bool,
+    show_alternatives: Option<usize>,
     json_output: bool,
 ) -> Result<()> {
+    // Refresh pools if requested
+    if refresh {
+        if !json_output {
+            println!("\n{} Refreshing pool data...", "".bright_cyan());
+        }
+        
+        let factories = aggregator.get_config().get_all_factories();
+        for (dex_name, factory_addr) in factories {
+            let _ = aggregator.fetch_pools(factory_addr, dex_name, Some(100)).await;
+        }
+        aggregator.export_cache("./cache/pools.json")?;
+        
+        if !json_output {
+            println!("{} Pool data refreshed!\n", "✓".bright_green());
+        }
+    }
+
     // Parse token symbols or addresses
     let token_in_addr = utils::parse_token(token_in)?;
     let token_out_addr = utils::parse_token(token_out)?;
@@ -223,7 +332,10 @@ async fn handle_quote(
         println!();
     }
 
-    let quote = aggregator.get_best_quote(token_in_addr, token_out_addr, amount_in, strategy)?;
+    // Get top N quotes if alternatives requested, otherwise just get best
+    let limit = show_alternatives.map(|n| n + 1).unwrap_or(1); // +1 to include best route
+    let quotes = aggregator.get_top_quotes(token_in_addr, token_out_addr, amount_in, strategy, limit)?;
+    let quote = &quotes[0]; // Best quote
 
     if json_output {
         let output = serde_json::json!({
@@ -239,7 +351,14 @@ async fn handle_quote(
         });
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
-        print_quote(&quote);
+        print_quote(quote);
+
+        // Print alternative routes if requested
+        if let Some(alt_count) = show_alternatives {
+            if quotes.len() > 1 {
+                print_alternative_routes(&quotes[1..], alt_count, token_in_addr, token_out_addr);
+            }
+        }
     }
 
     Ok(())
@@ -518,5 +637,116 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     
     println!();
     println!("{}", "━".repeat(60).bright_green());
+    println!();
+}
+
+fn print_alternative_routes(
+    alternatives: &[rust_aggregator::RouteQuote],
+    limit: usize,
+    token_in: ethers::types::Address,
+    token_out: ethers::types::Address,
+) {
+    use ethers::types::Address;
+    
+    let token_in_decimals = utils::get_token_decimals(token_in);
+    let token_out_decimals = utils::get_token_decimals(token_out);
+    let token_in_symbol = utils::get_token_symbol(token_in);
+    let token_out_symbol = utils::get_token_symbol(token_out);
+
+    println!("{}", "━".repeat(60).bright_yellow());
+    println!("{}  {} (showing up to {})", 
+        "".to_string(), 
+        "Alternative Routes".bright_yellow().bold(),
+        limit.to_string().bright_white()
+    );
+    println!("{}", "━".repeat(60).bright_yellow());
+    println!();
+
+    for (idx, quote) in alternatives.iter().take(limit).enumerate() {
+        let amount_in_f64 = quote.amount_in.as_u128() as f64 / 10f64.powi(token_in_decimals as i32);
+        let amount_out_f64 = quote.amount_out.as_u128() as f64 / 10f64.powi(token_out_decimals as i32);
+        let rate = if amount_in_f64 > 0.0 {
+            amount_out_f64 / amount_in_f64
+        } else {
+            0.0
+        };
+
+        println!("  {} {} {}", 
+            "".bright_black(),
+            format!("Alternative #{}", idx + 1).bright_white().bold(),
+            format!("(Score: {:.2})", quote.score).bright_black()
+        );
+
+        // Show route path with symbols
+        let route_tokens: Vec<Address> = quote.hops.iter()
+            .flat_map(|hop| vec![hop.token_in, hop.token_out])
+            .collect::<Vec<_>>();
+        
+        let mut seen = std::collections::HashSet::new();
+        let unique_tokens: Vec<Address> = route_tokens.into_iter()
+            .filter(|t| seen.insert(*t))
+            .collect();
+
+        let route_symbols: Vec<String> = unique_tokens.iter()
+            .map(|addr| utils::get_token_symbol(*addr))
+            .collect();
+
+        println!("    {} {}", 
+            "Route:".bright_black(),
+            route_symbols.join(" → ").bright_cyan()
+        );
+
+        // Show which DEXes are used
+        let dex_names: Vec<String> = quote.hops.iter()
+            .map(|hop| hop.dex_name.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        println!("    {} {}", 
+            "DEXes:".bright_black(),
+            dex_names.join(", ").bright_magenta()
+        );
+
+        println!("    {} {} {}", 
+            "Output:".bright_black(),
+            utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green(),
+            token_out_symbol.bright_green()
+        );
+
+        println!("    {} {}", 
+            "Rate:".bright_black(),
+            format!("{:.6} {} per {}", rate, token_out_symbol, token_in_symbol).bright_yellow()
+        );
+
+        let impact = quote.price_impact_bps as f64 / 100.0;
+        let impact_color = if impact < 0.5 {
+            "green"
+        } else if impact < 1.0 {
+            "yellow"
+        } else {
+            "red"
+        };
+        
+        let impact_str = format!("{:.2}%", impact);
+        let colored_impact = match impact_color {
+            "green" => impact_str.bright_green(),
+            "yellow" => impact_str.bright_yellow(),
+            "red" => impact_str.bright_red(),
+            _ => impact_str.normal(),
+        };
+
+        println!("    {} {}", 
+            "Price Impact:".bright_black(),
+            colored_impact
+        );
+
+        println!("    {} {} gas\n", 
+            "Gas:".bright_black(),
+            quote.gas_estimate.to_string().bright_yellow()
+        );
+    }
+
+    println!("{}", "━".repeat(60).bright_yellow());
     println!();
 }

@@ -123,7 +123,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            rpc_url: "https://eth-mainnet.g.alchemy.com/v2/demo".to_string(),
+            rpc_url: "https://eth.llamarpc.com".to_string(),
             chain_id: 1,
             uniswap_v2_factory: Address::from_str("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
                 .unwrap(),

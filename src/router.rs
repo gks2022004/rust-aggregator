@@ -28,6 +28,20 @@ impl Router {
         amount_in: U256,
         context: &MarketContext,
     ) -> Result<RouteQuote> {
+        let routes = self.find_top_routes(pools, token_in, token_out, amount_in, context, 1)?;
+        Ok(routes.into_iter().next().unwrap())
+    }
+
+    /// Find top N routes between two tokens, sorted by score
+    pub fn find_top_routes(
+        &self,
+        pools: &[PoolInfo],
+        token_in: Address,
+        token_out: Address,
+        amount_in: U256,
+        context: &MarketContext,
+        limit: usize,
+    ) -> Result<Vec<RouteQuote>> {
         info!(
             "Finding best route from {:?} to {:?} with {} strategy",
             token_in, token_out, self.optimization
@@ -64,16 +78,18 @@ impl Router {
             });
         }
 
-        // Sort by score and return best
+        // Sort by score (best first)
         route_quotes.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
 
-        let best = route_quotes.into_iter().next().unwrap();
-        info!(
-            "Best route: {} with score {:.2}",
-            best.description, best.score
-        );
+        if !route_quotes.is_empty() {
+            info!(
+                "Best route: {} with score {:.2}",
+                route_quotes[0].description, route_quotes[0].score
+            );
+        }
 
-        Ok(best)
+        // Return top N routes
+        Ok(route_quotes.into_iter().take(limit).collect())
     }
 
     /// Find all possible routes up to max_hops
