@@ -178,6 +178,49 @@ pub fn get_token_symbol(token_address: Address) -> String {
     }
 }
 
+/// Parse token symbol or address to Address
+/// Accepts both symbols (e.g., "WETH", "USDC") and addresses (e.g., "0xc02a...")
+pub fn parse_token(input: &str) -> Result<Address> {
+    // If it starts with 0x, treat as address
+    if input.starts_with("0x") || input.starts_with("0X") {
+        return parse_address(input);
+    }
+    
+    // Otherwise, treat as symbol (case-insensitive)
+    let symbol_upper = input.to_uppercase();
+    let address_str = match symbol_upper.as_str() {
+        // Stablecoins
+        "USDC" => "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "USDT" => "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "DAI" => "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "TUSD" => "0x0000000000085d4780b73119b644ae5ecd22b376",
+        "SUSD" => "0x57ab1ec28d129707052df4df418d58a2d46d5f51",
+        "BUSD" => "0x4fabb145d64652a948d72533023f6e7a623c7c53",
+        
+        // Major tokens
+        "WETH" | "ETH" => "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "WBTC" | "BTC" => "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        "MKR" => "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2",
+        "UNI" => "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+        "LINK" => "0x514910771af9ca656af840dff83e8264ecf986ca",
+        "MATIC" => "0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0",
+        "BAT" => "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+        "KNC" => "0xdd974d5c2e2928dea5f71b9825b8b646686bd200",
+        "SUSHI" => "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+        "AAVE" => "0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9",
+        "COMP" => "0xc00e94cb662c3520282e6f5717214004a7f26888",
+        "SHIB" => "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce",
+        "GNO" => "0x6810e776880c02933d47db1b9fc05908e5386b96",
+        "CRO" => "0xa0b73e1ff0b80914ab6fe0444e65848c4c34450b",
+        
+        _ => return Err(AggregatorError::ParseError(
+            format!("Unknown token symbol: {}. Use full address (0x...) or supported symbol (WETH, USDC, DAI, etc.)", input)
+        )),
+    };
+    
+    parse_address(address_str)
+}
+
 /// Parse a token amount string with decimal support
 /// Examples: "1.0", "0.5", "1000"
 pub fn parse_token_amount(amount_str: &str, decimals: u8) -> Result<U256> {

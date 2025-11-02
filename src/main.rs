@@ -198,9 +198,9 @@ async fn handle_quote(
     optimize: &str,
     json_output: bool,
 ) -> Result<()> {
-    // Parse addresses
-    let token_in_addr = utils::parse_address(token_in)?;
-    let token_out_addr = utils::parse_address(token_out)?;
+    // Parse token symbols or addresses
+    let token_in_addr = utils::parse_token(token_in)?;
+    let token_out_addr = utils::parse_token(token_out)?;
 
     // Get token decimals for proper parsing
     let token_in_decimals = utils::get_token_decimals(token_in_addr);
@@ -400,6 +400,55 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
         if quote.hop_count() == 1 { "hop" } else { "hops" }.bright_black()
     );
     println!();
+
+    // Show hop-by-hop breakdown for multi-hop routes
+    if quote.hop_count() > 1 {
+        println!("{}", "━".repeat(60).bright_yellow());
+        println!("{}  {}", "".to_string(), "Hop-by-Hop Breakdown".bright_yellow().bold());
+        println!("{}", "━".repeat(60).bright_yellow());
+        println!();
+        
+        for (i, hop) in quote.hops.iter().enumerate() {
+            let hop_token_in = utils::get_token_symbol(hop.token_in);
+            let hop_token_out = utils::get_token_symbol(hop.token_out);
+            let hop_token_in_decimals = utils::get_token_decimals(hop.token_in);
+            let hop_token_out_decimals = utils::get_token_decimals(hop.token_out);
+            
+            let hop_amount_in = utils::format_token_amount(hop.amount_in, hop_token_in_decimals);
+            let hop_amount_out = utils::format_token_amount(hop.amount_out, hop_token_out_decimals);
+            
+            // Calculate hop rate
+            let hop_in_f64 = hop.amount_in.as_u128() as f64 / 10f64.powi(hop_token_in_decimals as i32);
+            let hop_out_f64 = hop.amount_out.as_u128() as f64 / 10f64.powi(hop_token_out_decimals as i32);
+            let hop_rate = if hop_in_f64 > 0.0 {
+                hop_out_f64 / hop_in_f64
+            } else {
+                0.0
+            };
+            
+            println!("  {} {} {} → {}", 
+                format!("Hop {}", i + 1).bright_white().bold(),
+                hop_token_in.bright_cyan(),
+                "→".bright_yellow(),
+                hop_token_out.bright_magenta()
+            );
+            println!("    {} {} {}", 
+                "Swap:".bright_black(),
+                format!("{} {}", hop_amount_in, hop_token_in).bright_cyan(),
+                format!("→ {} {}", hop_amount_out, hop_token_out).bright_green()
+            );
+            println!("    {} {}", 
+                "Rate:".bright_black(),
+                format!("{:.6} {} per {}", hop_rate, hop_token_out, hop_token_in).bright_yellow()
+            );
+            println!("    {} {} ({})", 
+                "DEX:".bright_black(),
+                hop.dex_name.bright_white(),
+                format!("{:?}", hop.pool).bright_black()
+            );
+            println!();
+        }
+    }
 
     println!("{}", "━".repeat(60).bright_blue());
     println!("{}  {}", "".to_string(), "Quote Details".bright_blue().bold());
