@@ -202,8 +202,9 @@ async fn handle_quote(
     let token_in_addr = utils::parse_address(token_in)?;
     let token_out_addr = utils::parse_address(token_out)?;
 
-    // Parse amount (assume 18 decimals for now)
-    let amount_in = utils::parse_token_amount(amount_str, 18)?;
+    // Get token decimals for proper parsing
+    let token_in_decimals = utils::get_token_decimals(token_in_addr);
+    let amount_in = utils::parse_token_amount(amount_str, token_in_decimals)?;
 
     // Parse optimization strategy
     let strategy = match optimize.to_lowercase().as_str() {
@@ -361,6 +362,10 @@ fn handle_cache(aggregator: &Aggregator, action: CacheAction, json_output: bool)
 }
 
 fn print_quote(quote: &rust_aggregator::RouteQuote) {
+    // Get decimals for input and output tokens
+    let token_in_decimals = utils::get_token_decimals(quote.token_in);
+    let token_out_decimals = utils::get_token_decimals(quote.token_out);
+    
     println!();
     println!("{}", "━".repeat(60).bright_green());
     println!("{}  {}", "".to_string(), "Best Route Found".bright_green().bold());
@@ -398,15 +403,23 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     
     println!("  {} {}", 
         "Input:".bright_white().bold(),
-        utils::format_token_amount(quote.amount_in, 18).bright_cyan().bold()
+        utils::format_token_amount(quote.amount_in, token_in_decimals).bright_cyan().bold()
     );
     println!("  {} {}", 
         "Output:".bright_white().bold(),
-        utils::format_token_amount(quote.amount_out, 18).bright_green().bold()
+        utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green().bold()
     );
     println!();
     
-    let rate = quote.exchange_rate();
+    // Calculate proper exchange rate using decimals
+    let amount_in_f64 = quote.amount_in.as_u128() as f64 / 10f64.powi(token_in_decimals as i32);
+    let amount_out_f64 = quote.amount_out.as_u128() as f64 / 10f64.powi(token_out_decimals as i32);
+    let rate = if amount_in_f64 > 0.0 {
+        amount_out_f64 / amount_in_f64
+    } else {
+        0.0
+    };
+    
     println!("  {} {} {}", 
         "".to_string(),
         "Rate:".bright_white().bold(), 

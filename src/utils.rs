@@ -106,6 +106,36 @@ pub fn calculate_fee(amount: U256, fee_bps: u32) -> U256 {
         .unwrap_or(U256::zero())
 }
 
+/// Get token decimals for known tokens
+/// Returns 18 (default) if token is unknown
+pub fn get_token_decimals(token_address: Address) -> u8 {
+    let addr_str = format!("{:?}", token_address).to_lowercase();
+    
+    match addr_str.as_str() {
+        // Stablecoins (6 decimals)
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => 6, // USDC
+        "0xdac17f958d2ee523a2206206994597c13d831ec7" => 6, // USDT
+        
+        // Stablecoins (18 decimals)
+        "0x6b175474e89094c44da98b954eedeac495271d0f" => 18, // DAI
+        "0x0000000000085d4780b73119b644ae5ecd22b376" => 18, // TUSD
+        "0x57ab1ec28d129707052df4df418d58a2d46d5f51" => 18, // sUSD
+        
+        // Major tokens (18 decimals)
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" => 18, // WETH
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599" => 8,  // WBTC
+        "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2" => 18, // MKR
+        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984" => 18, // UNI
+        "0x514910771af9ca656af840dff83e8264ecf986ca" => 18, // LINK
+        "0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0" => 18, // MATIC
+        "0x0d8775f648430679a709e98d2b0cb6250d2887ef" => 18, // BAT
+        "0xdd974d5c2e2928dea5f71b9825b8b646686bd200" => 18, // KNC
+        
+        // Default: 18 decimals (most ERC20 tokens use 18)
+        _ => 18,
+    }
+}
+
 /// Parse a token amount string with decimal support
 /// Examples: "1.0", "0.5", "1000"
 pub fn parse_token_amount(amount_str: &str, decimals: u8) -> Result<U256> {
