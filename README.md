@@ -1,236 +1,292 @@
 # Rust DEX Aggregator
 
-A high-performance, professional-grade DEX aggregator built in Rust for finding optimal swap routes across decentralized exchanges.
+A high-performance decentralized exchange (DEX) aggregator built in Rust for finding optimal token swap routes across multiple DEXes on Ethereum mainnet.
+
+## Overview
+
+This aggregator implements intelligent routing algorithms to find the best swap prices by comparing routes across Uniswap V2, SushiSwap, and other AMM-based DEXes. It supports multi-hop routing (up to 4 hops) and provides real-time price quotes with detailed cost analysis.
 
 ## Features
 
-- **Multi-DEX Support**: UniswapV2, SushiSwap, and other V2 fork protocols
-- **Advanced Routing**: Multi-hop path finding with BFS algorithm
-- **Smart Optimization**: Multi-criteria scoring (price, gas, slippage)
-- **Professional CLI**: Clean output with JSON mode for automation
-- **Efficient Caching**: DashMap-based in-memory cache with disk persistence
-- **Reusable SDK**: Well-documented library for integration into trading bots
-- **Type Safety**: Leverages Rust's type system for reliability
+### Core Functionality
+- Multi-DEX aggregation (Uniswap V2, SushiSwap)
+- Multi-hop routing with BFS pathfinding algorithm
+- Real-time price quote calculations
+- Gas estimation and price impact analysis
+- Pool caching system for improved performance
+- Support for 20+ major ERC-20 tokens
+
+### Optimization Strategies
+- **Price**: Maximizes output amount
+- **Gas**: Minimizes gas costs
+- **Slippage**: Minimizes price impact
+- **Balanced**: Optimizes across all factors (default)
+
+### CLI Features
+- Token symbol support (WETH, USDC, DAI, etc.)
+- Colorized output with detailed route breakdowns
+- Hop-by-hop swap calculations
+- Alternative route comparison
+- Cache management (import/export/stats)
+- Real-time pool data refresh
 
 ## Architecture
 
 ```
-┌──────────────────────────┐
-│      CLI Layer           │   Built with clap
-│  (commands & formatting) │
-└──────────┬───────────────┘
-           │
-┌──────────▼───────────────┐
-│   Aggregator SDK         │   Public API
-│  - Pool Manager          │
-│  - Quote Engine          │
-│  - Router                │
-│  - Utils                 │
-└──────────┬───────────────┘
-           │
-┌──────────▼───────────────┐
-│  Ethereum RPC            │   ethers-rs
-│  (Provider + Contracts)  │
-└──────────────────────────┘
+rust-aggregator/
+├── src/
+│   ├── main.rs           # CLI interface and command handlers
+│   ├── lib.rs            # Public API and Aggregator struct
+│   ├── config.rs         # Configuration management
+│   ├── pools.rs          # Pool fetching and caching
+│   ├── router.rs         # Route finding and optimization
+│   ├── quote.rs          # Quote calculation engine
+│   ├── types.rs          # Core data structures
+│   └── utils.rs          # Helper functions and formatting
+├── cache/                # Pool data cache directory
+└── .env                  # Configuration file
 ```
 
 ## Installation
 
 ### Prerequisites
-
-- Rust 1.70+ (install from [rustup.rs](https://rustup.rs/))
-- An Ethereum RPC endpoint (Infura, Alchemy, or local node)
+- Rust 1.70 or higher
+- Ethereum RPC endpoint (Alchemy, Infura, or public RPC)
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/yourusername/rust-aggregator
+git clone https://github.com/gks2022004/rust-aggregator.git
 cd rust-aggregator
 cargo build --release
 ```
 
-The binary will be available at `target/release/dex` (or `target/release/dex.exe` on Windows).
-
-### Add to PATH (Optional)
-
-```bash
-# Linux/Mac
-cp target/release/dex /usr/local/bin/
-
-# Windows (PowerShell as Administrator)
-Copy-Item target\release\dex.exe C:\Windows\System32\
-```
+The compiled binary will be available at `target/release/dex` (or `dex.exe` on Windows).
 
 ## Configuration
 
-### 1. Create Environment File
+Create a `.env` file in the project root:
 
-```bash
-cp .env.example .env
-```
-
-### 2. Edit Configuration
-
-Open `.env` and configure:
-
-```bash
-# Required: Your Ethereum RPC endpoint
+```env
+# Required
 RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 
-# Optional: Network settings
+# Optional (defaults shown)
 CHAIN_ID=1
-
-# Optional: Factory addresses (defaults provided)
-UNISWAP_V2_FACTORY=0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
-SUSHISWAP_FACTORY=0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac
-
-# Optional: Cache settings
 CACHE_ENABLED=true
 CACHE_TTL_SECONDS=300
 CACHE_PATH=./cache/pools.json
-
-# Optional: Routing preferences
-MAX_HOPS=3
 DEFAULT_SLIPPAGE_BPS=50
+MAX_HOPS=3
 GAS_PRICE_GWEI=30
+
+# DEX Factory Addresses (defaults for Ethereum mainnet)
+UNISWAP_V2_FACTORY=0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
+SUSHISWAP_FACTORY=0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac
 ```
 
 ## Usage
 
-### Fetch Pools
+### Fetch Pool Data
 
-Fetch pool data from a DEX factory:
+Before getting quotes, fetch liquidity pool data from DEXes:
 
 ```bash
-# Fetch from Uniswap V2 factory
-dex fetch-pools \
+# Fetch from all supported DEXes
+cargo run --release -- fetch-all-dexes --limit 100
+
+# Fetch from specific factory
+cargo run --release -- fetch-pools \
   --factory 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f \
   --name Uniswap \
-  --limit 100
-
-# Fetch from SushiSwap factory
-dex fetch-pools \
-  --factory 0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac \
-  --name SushiSwap \
-  --limit 50
+  --limit 500
 ```
 
 ### Get Swap Quotes
 
-Get the best quote for a token swap:
+Basic quote using token symbols:
 
 ```bash
-# Basic quote (using token addresses)
-dex quote \
+cargo run --release -- quote WETH USDC 1.0
+```
+
+Quote with token addresses:
+
+```bash
+cargo run --release -- quote \
   0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 \
   0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
   1.0
-
-# With optimization strategy
-dex quote \
-  0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 \
-  0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
-  1.0 \
-  --optimize price      # Options: price, gas, slippage, balanced
-
-# JSON output for scripting
-dex quote \
-  0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 \
-  0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
-  1.0 \
-  --json
 ```
 
-### List Cached Pools
+Quote with optimization strategy:
 
 ```bash
-# List all pools
-dex list-pools
+cargo run --release -- quote WETH USDC 1.0 --optimize price
+cargo run --release -- quote WETH USDC 1.0 --optimize gas
+cargo run --release -- quote WETH USDC 1.0 --optimize slippage
+```
 
-# Filter by token
-dex list-pools --token 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+Quote with real-time data refresh:
 
-# JSON output
-dex list-pools --json
+```bash
+cargo run --release -- quote WETH USDC 1.0 --refresh
+```
+
+Show alternative routes for comparison:
+
+```bash
+cargo run --release -- quote USDC USDT 1000.0 --show-alternatives 5
 ```
 
 ### Cache Management
 
-```bash
-# Export cache to file
-dex cache export ./my-pools.json
-
-# Import cache from file
-dex cache import ./my-pools.json
-
-# Show statistics
-dex cache stats
-
-# Clear cache
-dex cache clear
-```
-
-## Optimization Strategies
-
-### Price (default)
-Maximizes output amount, ignoring gas costs. Best for large trades.
+View cache statistics:
 
 ```bash
-dex quote [TOKEN_IN] [TOKEN_OUT] [AMOUNT] --optimize price
+cargo run --release -- cache stats
 ```
 
-### Gas
-Minimizes gas costs, may sacrifice some output. Best for small trades where gas is significant.
+Export cache to file:
 
 ```bash
-dex quote [TOKEN_IN] [TOKEN_OUT] [AMOUNT] --optimize gas
+cargo run --release -- cache export ./backup/pools.json
 ```
 
-### Slippage
-Minimizes price impact, prioritizes low-slippage routes. Best for large trades in shallow markets.
+Import cache from file:
 
 ```bash
-dex quote [TOKEN_IN] [TOKEN_OUT] [AMOUNT] --optimize slippage
+cargo run --release -- cache import ./backup/pools.json
 ```
 
-### Balanced
-Smart balance between price, gas, and slippage. Recommended for most use cases.
+Clear all cached data:
 
 ```bash
-dex quote [TOKEN_IN] [TOKEN_OUT] [AMOUNT] --optimize balanced
+cargo run --release -- cache clear
 ```
 
-## SDK Usage
+### List Pools
 
-### Basic Example
+List all cached pools:
+
+```bash
+cargo run --release -- list-pools
+```
+
+Filter by token address:
+
+```bash
+cargo run --release -- list-pools --token 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+```
+
+## Supported Tokens
+
+The aggregator recognizes the following token symbols:
+
+| Symbol | Token Name | Decimals |
+|--------|------------|----------|
+| ETH/WETH | Wrapped Ether  | 18 |
+| USDC | USD Coin            | 6 |
+| USDT | Tether USD          | 6 |
+| DAI | Dai Stablecoin       | 18|
+| WBTC/BTC | Wrapped Bitcoin | 8 |
+| UNI | Uniswap Token       | 18 |
+| LINK | Chainlink          | 18 |
+| AAVE | Aave Token         | 18 |
+| SUSHI | SushiToken        | 18 |
+| COMP | Compound           | 18 |
+
+Plus additional major tokens. Full token addresses can also be used directly.
+
+## Output Example
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Best Route Found
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   Route Path:
+    USDC (0xa0b8...) → WETH (0xc02a...) → USDT (0xdac1...)
+
+  Hops: 2 hops
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Hop-by-Hop Breakdown
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Hop 1 USDC → WETH
+    Swap: 1000 USDC → 0.258764574299385897 WETH
+    Rate: 0.000259 WETH per USDC
+    DEX: Uniswap (0xb4e1...)
+
+  Hop 2 WETH → USDT
+    Swap: 0.258764574299385897 WETH → 1001.35596 USDT
+    Rate: 3869.756758 USDT per WETH
+    DEX: Uniswap (0x0d4a...)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Quote Details
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Input: 1000 USDC
+  Output: 1001.35596 USDT
+  Rate: 1.001356 USDT per USDC
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Cost Analysis
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   Gas Estimate: 200000
+   Price Impact: 0.20%
+```
+
+## Algorithm Details
+
+### Route Finding
+The router uses breadth-first search (BFS) to discover all possible routes between token pairs, supporting paths up to 4 hops. Each route is scored based on the selected optimization strategy.
+
+### Quote Calculation
+Quotes are calculated using the constant product formula (x * y = k) from UniswapV2, accounting for the 0.3% swap fee at each hop.
+
+### Optimization Scoring
+Each route receives a composite score based on:
+- Output amount (higher is better)
+- Gas cost estimate (lower is better)
+- Price impact in basis points (lower is better)
+
+The weights vary by strategy:
+- **Price**: 80% output, 10% gas, 10% slippage
+- **Gas**: 20% output, 70% gas, 10% slippage
+- **Slippage**: 20% output, 10% gas, 70% slippage
+- **Balanced**: 50% output, 25% gas, 25% slippage
+
+## API Usage
+
+The aggregator can be used as a library in other Rust projects:
 
 ```rust
 use rust_aggregator::{Aggregator, Config, OptimizationStrategy};
 use ethers::types::{Address, U256};
-use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load configuration
+    // Initialize aggregator
     let config = Config::from_env()?;
-    
-    // Create aggregator
     let aggregator = Aggregator::new(config).await?;
     
     // Fetch pools
-    let factory = Address::from_str("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")?;
-    aggregator.fetch_pools(factory, "Uniswap".to_string(), Some(100)).await?;
+    aggregator.fetch_all_pools(Some(100)).await?;
     
     // Get quote
-    let token_in = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
-    let token_out = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;
-    let amount = U256::from_dec_str("1000000000000000000")?; // 1 ETH
+    let token_in = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".parse()?;
+    let token_out = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse()?;
+    let amount = U256::from(1_000_000_000_000_000_000u64); // 1.0 WETH
     
     let quote = aggregator.get_best_quote(
         token_in,
         token_out,
         amount,
-        OptimizationStrategy::Balanced,
+        OptimizationStrategy::Balanced
     )?;
     
     println!("Best route: {}", quote.description);
@@ -240,114 +296,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Advanced Usage
-
-```rust
-use rust_aggregator::{Aggregator, Config};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_env()?;
-    let aggregator = Aggregator::new(config).await?;
-    
-    // Import cached pools
-    aggregator.import_cache("./cache/pools.json")?;
-    
-    // Get cache statistics
-    let stats = aggregator.get_cache_stats();
-    println!("Total pools: {}", stats.total_pools);
-    
-    // Get pools for specific token
-    let token = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
-    let pools = aggregator.get_pools_with_token(token);
-    println!("Found {} pools with WETH", pools.len());
-    
-    Ok(())
-}
-```
-
-## Testing
-
-Run the test suite:
-
-```bash
-# Run all tests
-cargo test
-
-# Run with output
-cargo test -- --nocapture
-
-# Run specific test
-cargo test test_uniswap_v2_formula
-
-# Run with verbose logging
-cargo test -- --nocapture --test-threads=1
-```
-
 ## Performance
 
-- Pool fetching: ~10-50 pools/second (RPC dependent)
-- Route calculation: <10ms for 1000+ pools
-- Multi-hop routing: Up to 4 hops with BFS
-- Memory usage: ~5KB per cached pool
+- Initial pool fetch: 30-60 seconds for 500-1000 pools per DEX
+- Quote calculation: 10-50ms for routes with up to 200 possible paths
+- Route finding: O(n * m) where n is number of pools and m is max hops
+- Memory usage: ~10-20MB for 1000 cached pools
 
-## Roadmap
+## Limitations
 
-- [ ] Phase 1: UniswapV2 support (Current)
-- [ ] Phase 2: UniswapV3 concentrated liquidity
-- [ ] Phase 3: Curve and Balancer support
-- [ ] Phase 4: Split routing optimization
-- [ ] Phase 5: MEV protection features
-- [ ] Phase 6: TUI mode with ratatui
-- [ ] Phase 7: Historical analytics
-- [ ] Phase 8: REST API server
+- Currently supports only UniswapV2-style AMMs
+- Does not execute actual swaps (quote-only)
+- Limited to Ethereum mainnet
+- No support for UniswapV3 concentrated liquidity
+- Rate limited by RPC provider
 
-## Common Token Addresses (Ethereum Mainnet)
+## Future Enhancements
 
-```
-WETH:  0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-USDC:  0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-USDT:  0xdAC17F958D2ee523a2206206994597C13D831ec7
-DAI:   0x6B175474E89094C44Da98b954EedeAC495271d0F
-WBTC:  0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599
-```
+- UniswapV3 integration with tick-based liquidity
+- Transaction execution with MEV protection
+- Multi-chain support (Polygon, Arbitrum, Optimism)
+- Historical price tracking and analytics
+- GraphQL/REST API server
+- WebSocket support for real-time updates
+- Flash loan arbitrage detection
 
-## Troubleshooting
+## Dependencies
 
-### "RPC_URL not set" Error
-
-Create a `.env` file with your RPC endpoint:
-```bash
-cp .env.example .env
-# Edit .env and add your RPC URL
-```
-
-### "No pools cached" Error
-
-Fetch pools before getting quotes:
-```bash
-dex fetch-pools --factory 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f --limit 100
-```
-
-### Slow Pool Fetching
-
-- Use `--limit` to fetch fewer pools
-- Consider using cache import/export for faster subsequent runs
-- Check your RPC rate limits
+- **ethers-rs**: Ethereum interaction
+- **tokio**: Async runtime
+- **clap**: CLI argument parsing
+- **colored**: Terminal output formatting
+- **serde**: JSON serialization
+- **dashmap**: Concurrent HashMap
+- **tracing**: Structured logging
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome. Please ensure all tests pass before submitting pull requests:
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Submit a pull request
+```bash
+cargo test
+cargo clippy
+cargo fmt
+```
 
 ## License
 
 MIT License - see LICENSE file for details
 
-## Disclaimer
 
-This software is for educational purposes. Always verify trades before execution. The authors are not responsible for any financial losses.
