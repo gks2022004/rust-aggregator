@@ -239,6 +239,11 @@ Plus additional major tokens. Full token addresses can also be used directly.
    Gas Estimate: 200000
    Price Impact: 0.20%
 ```
+## Demo
+
+
+https://github.com/user-attachments/assets/b6044d10-ce32-40e6-a562-26f145e6e40d
+
 
 ## Algorithm Details
 
