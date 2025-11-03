@@ -1,8 +1,3 @@
-// Rust DEX Aggregator Library
-//
-// A high-performance DEX aggregator for finding optimal swap routes
-// across decentralized exchanges.
-
 pub mod config;
 pub mod pools;
 pub mod quote;
@@ -10,7 +5,6 @@ pub mod router;
 pub mod types;
 pub mod utils;
 
-// Re-export commonly used types
 pub use config::Config;
 pub use pools::{PoolManager, CacheStats};
 pub use quote::{QuoteEngine, QuoteResult};
@@ -110,7 +104,7 @@ impl Aggregator {
         let router = Router::new(optimization, self.config.max_hops);
         let context = MarketContext {
             gas_price_gwei: self.config.gas_price_gwei,
-            eth_price_usd: 1800.0, // TODO: Fetch real ETH price
+            eth_price_usd: 1800.0,
             block_number: 0,
         };
 

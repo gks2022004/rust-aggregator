@@ -48,10 +48,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Terminal output
 colored = "2.1"
 comfy-table = "7.1"
-indicatif = "0.17"
 
-# Date/time
+# Date and time
 chrono = "0.4"
+indicatif = "0.17"
 
 # Utility
 hex = "0.4"

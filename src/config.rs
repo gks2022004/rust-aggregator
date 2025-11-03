@@ -3,44 +3,35 @@ use ethers::types::Address;
 use std::env;
 use std::str::FromStr;
 
-/// Application configuration
+
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Ethereum RPC URL
+
     pub rpc_url: String,
-    
-    /// Chain ID
+  
     pub chain_id: u64,
-    
-    /// UniswapV2 factory address
+
     pub uniswap_v2_factory: Address,
     
-    /// SushiSwap factory address
     pub sushiswap_factory: Address,
     
-    /// Enable caching
     pub cache_enabled: bool,
     
-    /// Cache TTL in seconds
     pub cache_ttl: u64,
     
-    /// Cache file path
     pub cache_path: String,
     
-    /// Default slippage tolerance in basis points
     pub default_slippage_bps: u32,
     
-    /// Maximum number of hops for routing
     pub max_hops: usize,
     
-    /// Default gas price in gwei
     pub gas_price_gwei: u64,
 }
 
 impl Config {
-    /// Load configuration from environment variables
+   
     pub fn from_env() -> Result<Self> {
-        // Load .env file if it exists
+    
         let _ = dotenvy::dotenv();
 
         let rpc_url = env::var("RPC_URL")

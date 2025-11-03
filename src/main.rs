@@ -325,10 +325,16 @@ async fn handle_quote(
     };
 
     if !json_output {
-        println!("\n{}", "━".repeat(60).bright_cyan());
-        println!("{}  {}", "".to_string(), "Searching for Best Route".bright_cyan().bold());
-        println!("{}", "━".repeat(60).bright_cyan());
-        println!("  Strategy: {}", format!("{:?}", strategy).bright_yellow().bold());
+        println!();
+        println!("{}", "═".repeat(70).bright_cyan());
+        println!("{:^70}", "ROUTE SEARCH".bright_cyan().bold());
+        println!("{}", "═".repeat(70).bright_cyan());
+        println!("  {:<20} {:?}", "STRATEGY".bright_white().bold(), strategy);
+        println!("  {:<20} {} → {}", 
+            "PAIR".bright_white().bold(),
+            utils::get_token_symbol(token_in_addr).bright_cyan(),
+            utils::get_token_symbol(token_out_addr).bright_cyan()
+        );
         println!();
     }
 
@@ -453,25 +459,37 @@ fn handle_cache(aggregator: &Aggregator, action: CacheAction, json_output: bool)
                     rust_aggregator::AggregatorError::Other(anyhow::anyhow!("JSON error: {}", e))
                 })?);
             } else {
-                println!("\n{}", "━".repeat(60).bright_cyan());
-                println!("{}  {}", "".to_string(), "Cache Statistics".bright_cyan().bold());
-                println!("{}", "━".repeat(60).bright_cyan());
-                println!("\n  Total Pools: {}\n", stats.total_pools.to_string().bright_yellow().bold());
+                println!();
+                println!("{}", "═".repeat(70).bright_cyan());
+                println!("{:^70}", "CACHE STATISTICS".bright_cyan().bold());
+                println!("{}", "═".repeat(70).bright_cyan());
+                println!();
+                println!("  {:<20} {}", 
+                    "TOTAL POOLS".bright_white().bold(),
+                    stats.total_pools.to_string().bright_yellow().bold()
+                );
+                println!();
                 
                 if !stats.dex_counts.is_empty() {
-                    println!("  {} Pools by DEX:", "".to_string());
+                    println!("  {}", "BREAKDOWN BY DEX".bright_white().bold());
                     for (dex, count) in stats.dex_counts {
-                        println!("    {} {}", "•".bright_cyan(), format!("{}: {}", dex.bright_white().bold(), count.to_string().bright_yellow()));
+                        println!("  {:<20} {} pools", 
+                            format!("  {}", dex).bright_cyan(),
+                            count.to_string().bright_yellow()
+                        );
                     }
                     println!();
                 }
+                println!("{}", "═".repeat(70).bright_cyan());
+                println!();
             }
         }
         CacheAction::Clear => {
             aggregator.clear_cache();
             if !json_output {
-                println!("\n{} {}", "".to_string(), "Cache Cleared".bright_green().bold());
-                println!("  All pools removed from memory");
+                println!();
+                println!("{}", "Cache cleared successfully".bright_green().bold());
+                println!();
                 println!();
             }
         }
@@ -488,9 +506,9 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
     let token_out_symbol = utils::get_token_symbol(quote.token_out);
     
     println!();
-    println!("{}", "━".repeat(60).bright_green());
-    println!("{}  {}", "".to_string(), "Best Route Found".bright_green().bold());
-    println!("{}", "━".repeat(60).bright_green());
+    println!("{}", "═".repeat(70).bright_green());
+    println!("{:^70}", "BEST ROUTE FOUND".bright_green().bold());
+    println!("{}", "═".repeat(70).bright_green());
     println!();
 
     // Route visualization with colors and token symbols
@@ -504,27 +522,26 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
             let symbol = utils::get_token_symbol(token_addr);
             
             if i == 0 {
-                format!("{} ({})", symbol.bright_cyan().bold(), addr.bright_black())
+                format!("{}", symbol.bright_cyan().bold())
             } else {
-                format!("{} {} ({})", "→".bright_yellow(), symbol.bright_magenta().bold(), addr.bright_black())
+                format!("{} {}", "→".bright_black(), symbol.bright_cyan().bold())
             }
         })
         .collect();
     
-    println!("  {} {}", "".to_string(), "Route Path:".bright_white().bold());
-    println!("    {}", route_parts.join(" "));
-    println!();
-    println!("  {} {} ", 
-        format!("Hops: {}", quote.hop_count()).bright_white().bold(), 
+    println!("  {:<20} {}", "ROUTE".bright_white().bold(), route_parts.join(" "));
+    println!("  {:<20} {} {}", 
+        "HOPS".bright_white().bold(),
+        quote.hop_count().to_string().bright_yellow().bold(),
         if quote.hop_count() == 1 { "hop" } else { "hops" }.bright_black()
     );
     println!();
 
     // Show hop-by-hop breakdown for multi-hop routes
     if quote.hop_count() > 1 {
-        println!("{}", "━".repeat(60).bright_yellow());
-        println!("{}  {}", "".to_string(), "Hop-by-Hop Breakdown".bright_yellow().bold());
-        println!("{}", "━".repeat(60).bright_yellow());
+        println!("{}", "─".repeat(70).bright_black());
+        println!("{:^70}", "ROUTE DETAILS".bright_yellow().bold());
+        println!("{}", "─".repeat(70).bright_black());
         println!();
         
         for (i, hop) in quote.hops.iter().enumerate() {
@@ -545,45 +562,34 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
                 0.0
             };
             
-            println!("  {} {} {} → {}", 
-                format!("Hop {}", i + 1).bright_white().bold(),
+            println!("  {} {}", 
+                format!("HOP {}", i + 1).bright_white().bold(),
+                format!("{} → {}", hop_token_in, hop_token_out).bright_cyan(),
+            );
+            println!("  {:<18} {} {} {} {} {}", 
+                "".to_string(),
+                hop_amount_in.bright_white(),
                 hop_token_in.bright_cyan(),
-                "→".bright_yellow(),
-                hop_token_out.bright_magenta()
+                "→".bright_black(),
+                hop_amount_out.bright_white(),
+                hop_token_out.bright_cyan()
             );
-            println!("    {} {} {}", 
-                "Swap:".bright_black(),
-                format!("{} {}", hop_amount_in, hop_token_in).bright_cyan(),
-                format!("→ {} {}", hop_amount_out, hop_token_out).bright_green()
+            println!("  {:<18} {}", 
+                "".to_string(),
+                format!("@ {:.6} {} per {}", hop_rate, hop_token_out, hop_token_in).bright_black()
             );
-            println!("    {} {}", 
-                "Rate:".bright_black(),
-                format!("{:.6} {} per {}", hop_rate, hop_token_out, hop_token_in).bright_yellow()
-            );
-            println!("    {} {} ({})", 
-                "DEX:".bright_black(),
-                hop.dex_name.bright_white(),
-                format!("{:?}", hop.pool).bright_black()
+            println!("  {:<18} {} {}", 
+                "".to_string(),
+                "via".bright_black(),
+                hop.dex_name.bright_yellow()
             );
             println!();
         }
     }
 
-    println!("{}", "━".repeat(60).bright_blue());
-    println!("{}  {}", "".to_string(), "Quote Details".bright_blue().bold());
-    println!("{}", "━".repeat(60).bright_blue());
-    println!();
-    
-    println!("  {} {} {}", 
-        "Input:".bright_white().bold(),
-        utils::format_token_amount(quote.amount_in, token_in_decimals).bright_cyan().bold(),
-        token_in_symbol.bright_cyan()
-    );
-    println!("  {} {} {}", 
-        "Output:".bright_white().bold(),
-        utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green().bold(),
-        token_out_symbol.bright_green()
-    );
+    println!("{}", "─".repeat(70).bright_black());
+    println!("{:^70}", "QUOTE SUMMARY".bright_blue().bold());
+    println!("{}", "─".repeat(70).bright_black());
     println!();
     
     // Calculate proper exchange rate using decimals
@@ -595,22 +601,26 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
         0.0
     };
 
-    println!("  {} {}", 
-        "Rate:".bright_white().bold(), 
-        format!("{:.6} {} per {}", rate, token_out_symbol, token_in_symbol).bright_yellow().bold()
+    println!("  {:<20} {} {}", 
+        "INPUT".bright_white().bold(),
+        utils::format_token_amount(quote.amount_in, token_in_decimals).bright_cyan().bold(),
+        token_in_symbol.bright_cyan()
+    );
+    println!("  {:<20} {} {}", 
+        "OUTPUT".bright_white().bold(),
+        utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green().bold(),
+        token_out_symbol.bright_green()
+    );
+    println!("  {:<20} {}", 
+        "EXCHANGE RATE".bright_white().bold(), 
+        format!("{:.6} {}/{}", rate, token_out_symbol, token_in_symbol).bright_yellow().bold()
     );
     println!();
 
-    println!("{}", "━".repeat(60).bright_magenta());
-    println!("{}  {}", "".to_string(), "Cost Analysis".bright_magenta().bold());
-    println!("{}", "━".repeat(60).bright_magenta());
+    println!("{}", "─".repeat(70).bright_black());
+    println!("{:^70}", "COST ANALYSIS".bright_magenta().bold());
+    println!("{}", "─".repeat(70).bright_black());
     println!();
-    
-    println!("  {} {} {}", 
-        "".to_string(),
-        "Gas Estimate:".bright_white().bold(), 
-        quote.gas_estimate.to_string().bright_yellow()
-    );
     
     let impact = quote.price_impact_bps as f64 / 100.0;
     let impact_color = if impact < 0.5 {
@@ -629,52 +639,44 @@ fn print_quote(quote: &rust_aggregator::RouteQuote) {
         _ => impact_str.normal(),
     };
     
-    println!("  {} {} {}", 
-        "".to_string(),
-        "Price Impact:".bright_white().bold(), 
+    println!("  {:<20} {} gas", 
+        "GAS ESTIMATE".bright_white().bold(), 
+        quote.gas_estimate.to_string().bright_yellow()
+    );
+    
+    println!("  {:<20} {}", 
+        "PRICE IMPACT".bright_white().bold(), 
         colored_impact.bold()
     );
     
     println!();
-    println!("{}", "━".repeat(60).bright_green());
+    println!("{}", "═".repeat(70).bright_green());
     println!();
 }
 
 fn print_alternative_routes(
     alternatives: &[rust_aggregator::RouteQuote],
     limit: usize,
-    token_in: ethers::types::Address,
+    _token_in: ethers::types::Address,
     token_out: ethers::types::Address,
 ) {
     use ethers::types::Address;
     
-    let token_in_decimals = utils::get_token_decimals(token_in);
     let token_out_decimals = utils::get_token_decimals(token_out);
-    let token_in_symbol = utils::get_token_symbol(token_in);
     let token_out_symbol = utils::get_token_symbol(token_out);
 
-    println!("{}", "━".repeat(60).bright_yellow());
-    println!("{}  {} (showing up to {})", 
-        "".to_string(), 
-        "Alternative Routes".bright_yellow().bold(),
-        limit.to_string().bright_white()
+    println!("{}", "═".repeat(70).bright_yellow());
+    println!("{:^70}", 
+        format!("ALTERNATIVE ROUTES (Top {})", limit.min(alternatives.len())).bright_yellow().bold()
     );
-    println!("{}", "━".repeat(60).bright_yellow());
+    println!("{}", "═".repeat(70).bright_yellow());
     println!();
 
     for (idx, quote) in alternatives.iter().take(limit).enumerate() {
-        let amount_in_f64 = quote.amount_in.as_u128() as f64 / 10f64.powi(token_in_decimals as i32);
-        let amount_out_f64 = quote.amount_out.as_u128() as f64 / 10f64.powi(token_out_decimals as i32);
-        let rate = if amount_in_f64 > 0.0 {
-            amount_out_f64 / amount_in_f64
-        } else {
-            0.0
-        };
 
-        println!("  {} {} {}", 
-            "".bright_black(),
-            format!("Alternative #{}", idx + 1).bright_white().bold(),
-            format!("(Score: {:.2})", quote.score).bright_black()
+        println!("  {} {}", 
+            format!("OPTION {}", idx + 1).bright_white().bold(),
+            format!("(score: {:.0})", quote.score).bright_black()
         );
 
         // Show route path with symbols
@@ -691,8 +693,8 @@ fn print_alternative_routes(
             .map(|addr| utils::get_token_symbol(*addr))
             .collect();
 
-        println!("    {} {}", 
-            "Route:".bright_black(),
+        println!("  {:<18} {}", 
+            "".to_string(),
             route_symbols.join(" → ").bright_cyan()
         );
 
@@ -703,50 +705,25 @@ fn print_alternative_routes(
             .into_iter()
             .collect();
 
-        println!("    {} {}", 
-            "DEXes:".bright_black(),
-            dex_names.join(", ").bright_magenta()
+        println!("  {:<18} {}", 
+            "".to_string(),
+            format!("via {}", dex_names.join(", ")).bright_black()
         );
 
-        println!("    {} {} {}", 
-            "Output:".bright_black(),
+        println!("  {:<18} {} {}", 
+            "".to_string(),
             utils::format_token_amount(quote.amount_out, token_out_decimals).bright_green(),
             token_out_symbol.bright_green()
         );
 
-        println!("    {} {}", 
-            "Rate:".bright_black(),
-            format!("{:.6} {} per {}", rate, token_out_symbol, token_in_symbol).bright_yellow()
+        println!("  {:<18} {} gas | impact: {}",
+            "".to_string(),
+            quote.gas_estimate.to_string().bright_yellow(),
+            format!("{:.2}%", quote.price_impact_bps as f64 / 100.0).bright_black()
         );
-
-        let impact = quote.price_impact_bps as f64 / 100.0;
-        let impact_color = if impact < 0.5 {
-            "green"
-        } else if impact < 1.0 {
-            "yellow"
-        } else {
-            "red"
-        };
-        
-        let impact_str = format!("{:.2}%", impact);
-        let colored_impact = match impact_color {
-            "green" => impact_str.bright_green(),
-            "yellow" => impact_str.bright_yellow(),
-            "red" => impact_str.bright_red(),
-            _ => impact_str.normal(),
-        };
-
-        println!("    {} {}", 
-            "Price Impact:".bright_black(),
-            colored_impact
-        );
-
-        println!("    {} {} gas\n", 
-            "Gas:".bright_black(),
-            quote.gas_estimate.to_string().bright_yellow()
-        );
+        println!();
     }
 
-    println!("{}", "━".repeat(60).bright_yellow());
+    println!("{}", "═".repeat(70).bright_yellow());
     println!();
 }

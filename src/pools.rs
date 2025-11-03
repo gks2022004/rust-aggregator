@@ -225,8 +225,13 @@ impl PoolManager {
             self.pools.insert(pool.address, pool);
         }
 
-        info!("Imported {} pools from {} (cached at timestamp: {})", 
-            count, path, cache_data.timestamp);
+        // Format timestamp to human-readable date
+        let datetime = chrono::DateTime::from_timestamp(cache_data.timestamp as i64, 0)
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+            .unwrap_or_else(|| format!("timestamp: {}", cache_data.timestamp));
+
+        info!("Imported {} pools from {} (cached at {})", 
+            count, path, datetime);
         Ok(count)
     }
 
